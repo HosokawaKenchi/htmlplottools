@@ -1,0 +1,721 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script src=" https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+</head>
+
+<body>
+	<section id="console-area">
+
+		<h2><span>Data input</span></h2>
+		<div id="dataInputBox">
+
+			<div id="upFileWrap">
+				<div id="inputFile">
+					<p id="dropArea">Drop a file here<br>or</p>
+
+					<div id="inputFileWrap">
+						<input type="file" name="uploadFile" id="uploadFile">
+						<div id="btnInputFile"><span>select a file...</span></div>
+						<div id="btnChangeFile"><span>change the file...</span></div>
+					</div>
+				</div>
+			</div>
+			
+			<div id="CSVform">
+				<textarea id="CSVformDirectText"></textarea><br />
+				<button id="CSVformReadButton">read this CSV</button>
+			</div>
+
+		</div>
+		
+		<div>
+			<label><input type="checkbox" id="FirstRowToLabel" checked>Treat top row as column label</label>
+			<label><input type="checkbox" id="FirstColumnToLabel">Treat left column as row label</label>
+			<label><input type="checkbox" id="TransposeLabel" checked>Row as individual record</label>
+		</div>
+		<div style="display: none;">
+			<button type="button" id="TransposeButton" >Transpose</button>
+		</div>
+		<div id="console-log"></div>
+	</section>
+
+	<section id="console-area" style="position:relative;">
+		<h2><span>Plot options</span></h2>
+		<div>
+			<label for="plot-select">Choose a type:</label>
+			<select name="plotType" id="plotType">
+				<option value="scatter" selected>Scatter</option>
+				<option value="bubble">bubble</option>
+				<option value="heatmap">Heatmap</option>
+				<option value="box">Box</option>
+				<option value="violin">Violin</option>
+			</select>
+
+			<button type="button" id="DrawButton">Draw</button>
+			<span style="color: #bbb">➜</span>
+			<span style="background-color: #eee; padding:0.1rem 0.2rem 0.3rem 0.2rem;">
+				<span style="color: gray; font-family: 'Lucida Console', Courier, monospace;;">Save image:</span>
+				<input type="text" size="20" id="downloadFileBaseName" />
+				<select name="imageFileType" id="imageFileType">
+					<option value="svg">.svg</option>
+					<option value="png">.png</option>
+				</select>
+				<button type="button" id="DownloadSVGButton">Save</button>
+				<!--
+					<label><input type="radio" id="SaveAsNone" name="SaveAsOption" value="none" checked>none</label>
+					<label><input type="radio" id="SaveAsPNG" name="SaveAsOption" value="PNG" checked>PNG</label>
+					<label><input type="radio" id="SaveAsSVG" name="SaveAsOption" value="SVG" checked>SVG</label>
+				-->
+			</span>
+		</div>
+
+		<div id="LayoutOptionTexts">
+			<div>default layout<br /><textarea id="layout_default">{}</textarea></div>
+			<div>customized layout<br /><textarea id="layout_customized">{}</textarea></div>
+		</div>
+		<div id="LayoutOptionTexts">
+			<div>default option<br /><textarea id="option_default">{}</textarea></div>
+			<div>customized option<br /><textarea id="option_customized">{}</textarea></div>
+		</div>
+	</section>
+
+	<section id="table-area" style="position:relative;">
+	</section>
+
+	<section id="plot-area" style="position:relative;">
+		<div id="myDiv3" style="z-index:1;position:absolute;left:0;top:0;"></div>
+		<div id="myDiv2" style="z-index:2;position:absolute;left:0;top:0;"></div>
+		<div id="myDiv" style="z-index:10;position:absolute;left:0;top:0;"></div>
+	</section>
+
+	<section id="export-area" style="">
+		<img id="svg-export"></img>
+	</section>
+
+
+<script type="module">
+var OnCSVLoad = null;
+var fileText = "";
+var dataFrame = {};
+var CSVformReadButton = document.getElementById('CSVformReadButton');
+CSVformReadButton.addEventListener('click', function(e) {
+	fileText = document.getElementById('CSVformDirectText').value;
+	dataFrame = convertTxtToTable(fileText);
+	if(document.getElementById("TransposeLabel").checked) { dataFrame = transposeDataFrame(dataFrame); }
+	OnCSVLoad();
+});
+
+var fileArea = document.getElementById('dropArea');
+var fileInput = document.getElementById('uploadFile');
+fileArea.addEventListener('dragover', function(e) { e.preventDefault(); fileArea.classList.add('dragover'); });
+fileArea.addEventListener('dragleave', function(e) { e.preventDefault(); fileArea.classList.remove('dragover'); });
+fileArea.addEventListener('drop', function(e){
+	alert("dropped!");
+	e.preventDefault();
+	fileArea.classList.remove('dragover');
+	var files = e.dataTransfer.files;
+	fileInput.files = files;
+	if(typeof files[0] !== 'undefined') {
+		readCSV(files[0]);
+	} else {}
+});
+fileInput.addEventListener('change', function(e){
+	var file = e.target.files[0];
+	if(typeof file !== 'undefined') {
+		readCSV(file);
+	} else {}
+}, false);
+function readCSV(f) {
+	if(!f.type.match('text.*') || !f.name.toLowerCase().match('.csv$')) {
+		alert(`use CSV : ${f.type} ${f.name.toLowerCase()}`); return;
+	}
+	
+	var reader = new FileReader();
+	reader.onload = function() {
+		fileText = reader.result;
+		dataFrame = convertTxtToTable(fileText);
+		if(document.getElementById("TransposeLabel").checked) { dataFrame = transposeDataFrame(dataFrame); }
+		OnCSVLoad();
+	}
+	reader.readAsText(f);
+}
+function convertTxtToTable(txt) {
+	const firstRowToLabel = document.getElementById("FirstRowToLabel").checked;
+	const firstColumnToLabel = document.getElementById("FirstColumnToLabel").checked;
+	let colname = [];
+	let rowname = [];
+	let result = [];
+	let rows = txt.split(/\r\n|\n/);
+	if(firstRowToLabel) { colname = rows.shift().split(/,|\t/); }
+	else { for(let i=0; i<rows[0].length; i++) { colname.push(i); } }
+	for (let i=0; i<rows.length; i++) {
+		let cols = rows[i].split(/,|\t/);
+		if(firstColumnToLabel) { rowname.push(cols.shift()); }
+		else { rowname.push(i); }
+		result.push(cols);
+	}
+	return { "table": result, "colname": colname, "rowname": rowname };
+}
+function transposeDataFrame(df) {
+	let tmp = df.colname;
+	df.colname = df.rowname;
+	df.rowname = tmp;
+
+	const from_row_to_col = df.table.length;
+	const from_col_to_row = df.table[0].length;
+
+	let table = [];
+	for (let i=0; i<from_col_to_row; i++) { let arr = new Array(from_row_to_col); table.push(arr); }
+
+	for (let i=0; i<from_row_to_col; i++) {
+		for (let j=0; j<from_col_to_row; j++) {
+			table[j][i] = df.table[i][j];
+		}
+	}
+	df.table = table;
+	return df;
+}
+
+
+var transposeButton = document.getElementById('TransposeButton');
+transposeButton.addEventListener('click', function(e) {
+	e.preventDefault();
+	dataFrame = transposeDataFrame(dataFrame);
+});
+
+var drawButton = document.getElementById('DrawButton');
+drawButton.addEventListener('click', function(e) {
+	e.preventDefault();
+	drawPlot(dataFrame);
+});
+
+function drawPlot(df) {
+	let opt = {
+		//"SaveAs": document.querySelector('[name="SaveAsOption"]:checked').value
+	}
+	const layout_customized_str = document.getElementById("layout_customized").value;
+	const option_customized_str = document.getElementById("option_customized").value;
+	let layout_customized = {}, option_customized = {};
+	try {
+		//console.log(layout_customized_str);
+		const lay = JSON.parse(layout_customized_str);
+		layout_customized = lay;
+		//console.log(layout_customized);
+		const opt = JSON.parse(option_customized_str);
+		option_customized = opt;
+	} catch (e) {
+		console.log(e);
+	}
+	const plottype = document.getElementById("plotType").value;
+	switch (plottype){
+		case "scatter":
+			scatterPlot(df, opt, layout_customized, option_customized);
+			break;
+		case "bubble":
+			specialBubblePlot(df, opt, layout_customized, option_customized);
+			break;
+		case "heatmap":
+			plotHeatmap(df, opt, layout_customized, option_customized);
+			break;
+		case "box":
+			plotBox(df, opt, layout_customized, option_customized);
+			break;
+		case "violin":
+			plotViolin(df, opt, layout_customized, option_customized);
+			break;
+		default:
+			break;
+		}
+}
+
+var svg_uri = "";
+var png_uri = "";
+var downloadSVGButton = document.getElementById('DownloadSVGButton');
+downloadSVGButton.addEventListener('click', function(e) {
+	e.preventDefault();
+	let base_name = document.getElementById('downloadFileBaseName').value;
+	if(!(typeof base_name === 'string') || base_name.length==0) { base_name = "plot"; }
+	
+	const imageFileType = document.getElementById("imageFileType").value;
+	switch (imageFileType){
+		case "svg":
+			downloadSVG(svg_uri, base_name);
+			break;
+		//case "png":
+		//	downloadPNG(svg_uri, base_name);
+		//	break;
+		default:
+			break;
+	}
+});
+function downloadSVG(svg_data, base_name) {
+	let data = svg_data;
+	if(svg_data.indexOf('data:image/svg+xml,')==0) { data = svg_data.substring(19); }
+	else { alert("No SVG data is stocked."); return; }
+	const blob = new Blob([data], {type: 'image/svg+xml'});
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement("a");
+	document.body.appendChild(a);
+	a.download = base_name + '.svg';
+	a.href = url;
+	a.click();
+	a.remove();
+	URL.revokeObjectURL(url);
+}
+
+
+OnCSVLoad = function() {
+	drawPlot(dataFrame);
+}
+
+
+
+
+
+var common = {}
+
+common.color = {}
+common.color.pallet = {}
+common.color.scheme = {}
+common.color.scales = {}
+common.color.scales.spectral_heatmap = [
+	['0.0', 'rgb(16,39,97)'],
+	['0.111111111111', 'rgb(69,117,180)'],
+	['0.222222222222', 'rgb(116,173,209)'],
+	['0.333333333333', 'rgb(146,209,173)'],
+	['0.444444444444', 'rgb(171,233,164)'],
+	['0.555555555556', 'rgb(221,221,160)'],
+	['0.666666666667', 'rgb(233,202,144)'],
+	['0.777777777778', 'rgb(240,174,97)'],
+	['0.888888888889', 'rgb(245,109,67)'],
+	['1.0', 'rgb(255,48,39)']
+];
+
+common.layout = {
+	// https://plotly.com/javascript/reference/layout/xaxis/
+	xaxis: {
+		type: "-",     // "-" | "linear" | "log" | "date" | "category" | "multicategory" 
+		autorange: "true",
+		range: null,        // [min, max]
+		tickmode: 'linear', // tickmode:'array', tickvals:[0,1,2], ticktext:['Zero','One','Two']
+		//https://plotly.com/javascript/tick-formatting/
+		ticks: "outside", // "outside", "inside", ""
+		tick0: 0,           // beginning
+		dtick: "auto",      // interval (delta)
+		ticklabelposition: "outside", // "outside" | "inside" | "outside top" | "inside top" | "outside left" | "inside left" | "outside right" | "inside right" | "outside bottom" | "inside bottom"
+		ticklabelstep: 1,
+		//https://github.com/d3/d3-format/blob/master/README.md#locale_format
+		tickformat: ',',    // ".1f"=>10.0, ".2s"=>10k, "%Y%m%d(%a)<br>%H:%M:%S"
+		tickfont: {},
+		ticklen: 5,
+		tickwidth: 1,
+		color: 'black',
+		linecolor: 'black',
+		linewidth: 1,
+		showgrid: false,    // gridcolor: "#eee", gridwidth: 1, griddash: "solid"
+		zeroline: false,    // zerolinecolor: "#444", zerolinewidth: 1
+		title: { text: "", font: {} },
+	},
+	yaxis: {
+		type: '-',
+		autorange: "true",
+		range: null,
+		tickmode: 'linear',
+		ticks: "outside", // "outside", "inside", ""
+		tick0: 0,
+		dtick: "auto",
+		ticklabelposition: "outside", // "outside" | "inside" | "outside top" | "inside top" | "outside left" | "inside left" | "outside right" | "inside right" | "outside bottom" | "inside bottom"
+		ticklabelstep: 1,
+		tickformat: ',',
+		tickfont: {},
+		ticklen: 5,
+		tickwidth: 1,
+		color: 'black',
+		linecolor: 'black',
+		linewidth: 1,
+		showgrid: false,
+		zeroline: false,
+		title: { text: "", font: {} },
+	},
+	font: { size: 24, color: 'black', family: 'Arial', },
+	width: 800*1.0,
+	height: 800*1.0,
+	title: { text: "", font: {} },
+	//margin: { l: 100, r: 30, b: 80, t: 100 },
+	paper_bgcolor: 'rgba(255, 255, 255, 0)',
+	plot_bgcolor: 'rgba(255, 255, 255, 0)',
+	//showlegend: false,
+};
+
+
+//Object.freeze
+//structuredClone(obj) <- deepcopy
+//_.merge(a, b) <- deepmerge
+
+function mergeLayoutOptions(dic1, dic2) {
+	if(dic2 instanceof Object) {
+		let dic_merged = _.merge(dic1, dic2);
+		return dic_merged;
+	} else {
+		return dic1;
+	}
+}
+function mergeLayoutOptionsInArray(dic1, dic2, i) {
+	if(Array.isArray(dic2)) {
+		return mergeLayoutOptions(dic1, dic2[i]);
+	} else {
+		return mergeLayoutOptions(dic1, dic2);
+	}
+}
+function writeToDefaultLayoutTextBox(json_obj) {
+	document.querySelector("#layout_default").value = JSON.stringify(json_obj, null , "  ");
+}
+function writeToDefaultOptionTextBox(json_obj) {
+	document.querySelector("#option_default").value = JSON.stringify(json_obj, null , "  ");
+}
+function setPlotareaHeight(height) {
+	document.querySelector("#plot-area").style.height = height;
+}
+
+
+function plotToElement(data, layout, options) {
+	//https://plotly.com/javascript/static-image-export/
+	//https://codepen.io/plotly/pen/mEPxyQ
+	setPlotareaHeight(layout.height);
+	Plotly.newPlot('myDiv', data, layout).then(function(gd) {
+		Plotly.toImage(gd,{format:'svg', height:layout.height,width:layout.width}).then(function(url) {
+			svg_uri = decodeURIComponent(url);
+		});
+		//Plotly.toImage(gd,{format:'png', height:layout.height,width:layout.width}).then(function(url) {
+		//	png_uri = decodeURIComponent(url);
+		//});
+	});
+}
+
+function scatterPlot(df, opt, layout_customized, option_customized) {
+	let arr = df.table;
+	let xData = df.rowname;
+
+	let yData = arr;
+	let colors = ['rgba(0, 0, 0, 1.0)'];
+
+	let data = [];
+	for(let i=0; i<xData.length; i++) {
+		let result = {
+			type: "scatter",
+			marker: {
+				size: 2,
+			},
+			line: {
+				width: 1,
+			},
+			y: yData[i],
+			name: xData[i],
+			marker: {
+				size: 2,
+				color: colors[i]
+			},
+		};
+		data.push(result);
+	};
+	let layout = {
+		font: { size: 24, color: 'black', family: 'Arial', },
+		width: 800*2.9,
+		height: 800*1.0,
+		title: '',
+	};
+	document.querySelector("#layout_default").value = JSON.stringify(layout, null , "  ");
+	if(!(layout_customized===undefined)){ layout = mergeLayoutOptions(layout, layout_customized); }
+	plotToElement(data, layout, opt);
+}
+
+
+function plotBox(df, opt, layout_customized, option_customized) {
+	// https://plotly.com/javascript/violin/
+	const colorsA =[
+		'hsla(280,50%,70%,0.5)','hsla(260,50%,70%,0.5)','hsla(240,50%,70%,0.5)','hsla(220,50%,70%,0.5)','hsla(200,50%,70%,0.5)',
+		'hsla(280,30%,70%,0.25)','hsla(260,30%,70%,0.25)','hsla(240,30%,70%,0.25)','hsla(220,30%,70%,0.25)',
+		'hsla(0,50%,50%,0.5)',
+		'hsla(100,30%,70%,0.5)','hsla(120,30%,70%,0.5)','hsla(140,30%,70%,0.5)','hsla(160,30%,70%,0.5)',
+	];
+	const colorsB =[
+		'hsla(280,100%,50%,0.85)','hsla(260,100%,50%,0.85)','hsla(240,100%,50%,0.85)','hsla(220,100%,50%,0.85)','hsla(220,100%,50%,0.85)',
+		'hsla(280,50%,50%,0.35)','hsla(260,50%,50%,0.35)','hsla(240,50%,50%,0.35)','hsla(220,50%,50%,0.35)',
+		'hsla(0,100%,50%,1.0)',
+		'hsla(100,70%,50%,0.85)','hsla(120,70%,50%,0.85)','hsla(140,70%,50%,0.85)','hsla(160,70%,50%,0.85)',
+	];
+	const series_default_options = {
+		type: 'box',
+		width: 0.5,
+		pointpos: 0,
+		boxpoints: 'all', // "all" | "outliers" | "suspectedoutliers" | false
+		opacity: 1,
+	};
+	const layout_specific = {
+	};
+	let layout = mergeLayoutOptions(common.layout, layout_specific);
+	writeToDefaultLayoutTextBox(layout);
+	writeToDefaultOptionTextBox(series_default_options);
+	
+	let data = [];
+	for(let x=0; x<df.table.length; x++) {
+		let seriese = {
+			name: df.rowname[x],
+			x:df.rowname[x],
+			y:[],
+			fillcolor: colorsA[x], // 'auto'
+			line: { color: colorsB[x] },
+			marker: { opacity: 1, size: 6, color: colorsB[x], line: { color: colorsB[x] } },
+		};
+		let series_options = mergeLayoutOptionsInArray(series_default_options, option_customized, x);
+		seriese = mergeLayoutOptionsInArray(seriese, series_options, x);
+		data.push(seriese);
+		for(let y=0; y<df.table[x].length; y++) {
+			data[x].y.push(df.table[x][y]);
+		}
+	}
+	
+	if(!(layout_customized===undefined)){ layout = mergeLayoutOptions(layout, layout_customized); }
+	plotToElement(data, layout, opt);
+}
+
+
+function plotViolin(df, opt, layout_customized, option_customized) {
+	// https://plotly.com/javascript/violin/
+	let colors = ['blue', 'red', 'orange', 'green'];
+	const series_default_options = {
+		type: 'violin',
+		bandwidth: 'auto', //bandwidth used to compute the kernel density estimate.
+		side: 'both',
+		points: 'all', // 'all', 'none'
+		box: { visible: false, width: 0.5, },
+		boxpoints: false,
+		marker: { opacity: 1, size: 6, },
+		line: { width: 0, },
+		fillcolor: "auto",
+		opacity: 1,
+		meanline: { visible: true },
+	};
+	const layout_specific = {
+	};
+	let layout = mergeLayoutOptions(common.layout, layout_specific);
+	writeToDefaultLayoutTextBox(layout);
+	writeToDefaultOptionTextBox(series_default_options);
+	
+	var data = [];
+	for(let x=0; x<df.table.length; x++) {
+		let seriese = {
+			x:df.rowname[x],
+			y:[],
+			name: df.rowname[x],
+		};
+		let series_options = mergeLayoutOptionsInArray(series_default_options, option_customized, x);
+		seriese = mergeLayoutOptionsInArray(seriese, series_options, x);
+		data.push(seriese);
+		for(let y=0; y<df.table[x].length; y++) {
+			data[x].y.push(df.table[x][y]);
+		}
+	}
+	
+	if(!(layout_customized===undefined)){ layout = mergeLayoutOptions(layout, layout_customized); }
+	plotToElement(data, layout, opt);
+}
+
+
+function plotHeatmap(df, opt, layout_customized, option_customized) {
+	const layout_specific = {
+		xaxis: {
+			tickmode: 'linear',
+			tick0: 0,
+			dtick: df.table[0].length / 6
+		},
+		coloraxis: {
+			cmax: 100,
+			cmin: 0,
+			colorscale: common.color.scales.spectral_heatmap, // "jet"
+		},
+	};
+	let layout = mergeLayoutOptions(common.layout, layout_specific);
+	const series_default_options = {
+	};
+	writeToDefaultLayoutTextBox(layout);
+	writeToDefaultOptionTextBox(series_default_options);
+
+	var data = [
+		{
+			z: df.table,
+			type: 'heatmap',
+			coloraxis: 'coloraxis'
+		}
+	];
+
+	if(!(layout_customized===undefined)){ layout = mergeLayoutOptions(layout, layout_customized); }
+	plotToElement(data, layout, opt);
+}
+
+
+function specialBubblePlot(df, opt, layout_customized) {
+	const layout_specific = {
+		font: { size: 24, color: 'black', family: 'Arial', },
+		width: 800*2.9,
+		height: 800*1.0,
+	    title: '',
+	};
+	let layout = mergeLayoutOptions(common.layout, layout_specific);
+	const series_default_options = {
+	};
+	writeToDefaultLayoutTextBox(layout);
+	writeToDefaultOptionTextBox(series_default_options);
+
+	var data = [];
+	for(let i=1; i<df.table.length; i++) {
+		let colors = new Array(df.table[i].length);
+		let sizes = new Array(df.table[i].length);
+		df.table[i] = df.table[i].map(parseFloat);
+		for(let j=0; j<df.table[i].length; j++) {
+			sizes[j] = df.table[i][j]+1
+			colors[j] = `rgb(${df.table[i][j]*2.55}, 0, 0)`
+		}
+		var result = {
+			mode: "markers",
+			x: df.table[0],
+			y: (new Array(df.table[i].length)).fill(df.table.length-i),
+			name: df.rowname[i],
+			marker: {
+				size: 20,
+				color: colors
+			},
+		};
+		data.push(result);
+	};
+
+	if(!(layout_customized===undefined)){ layout = mergeLayoutOptions(layout, layout_customized); }
+	plotToElement(data, layout, opt);
+}
+
+
+
+
+</script>
+</body>
+
+<style>
+#dataInputBox {
+	width: 100%;
+	display: flex;
+}
+#dataInputBox > div {
+	flex-grow: 1;
+}
+#CSVform {
+	padding: 1rem;
+}
+#CSVformDirectText {
+	width: 100%;
+	height: calc(100% - 1rem);
+}
+
+#dropArea {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 6rem;
+	padding: 1rem 0 0rem;
+	border: 2px dashed #494949;
+	background: rgba(22, 165, 191, 0);
+	transition: all 0.25s cubic-bezier(0.21, 0.51, 0.51, 1);
+}
+
+#dropArea.dragover {
+	border: 2px solid #16a5bf;
+	background: rgba(22, 165, 191, 0.6);
+}
+
+#uploadFile {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 10;
+	display: block;
+	width: 10rem;
+	height: 2.5rem;
+	opacity: 0;
+}
+
+#inputFile {
+	position: relative;
+	padding: 5rem 0 1.5rem;
+	text-align: center;
+}
+
+#inputFileWrap {
+	position: relative;
+	display: inline-block;
+}
+
+#btnInputFile,
+#btnChangeFile {
+	display: table;
+	width: 10rem;
+}
+
+#btnChangeFile {
+	display: none;
+}
+
+#btnInputFile span,
+#btnChangeFile span {
+	position: relative;
+	z-index: 2;
+	display: table-cell;
+	width: 10rem;
+	height: 2.5rem;
+	border: 1px solid #333;
+	border-radius: 4px;
+	background: #333;
+	text-decoration: none;
+	color: #fff;
+	font-size: larger;
+	line-height: 1;
+	font-weight: bold;
+	vertical-align: middle;
+}
+
+#upFileWrap.selected #btnInputFile {
+	display: none;
+}
+
+#upFileWrap.selected #btnChangeFile {
+	display: table;
+}
+
+#LayoutOptionTexts {
+	display: flex;
+}
+
+#LayoutOptionTexts > div {
+	flex: 1 1 auto;
+	width: auto;
+}
+#LayoutOptionTexts > div > textarea {
+	width: 95%;
+	height: 5rem;
+}
+
+h2 {
+	font-size: medium;
+	background-color:#0097A7;
+}
+
+h2 > span {
+	margin: auto 3rem;
+	padding: 0.5rem;
+	background-color: #FFF8;
+}
+
+</style>
+
+</html>
