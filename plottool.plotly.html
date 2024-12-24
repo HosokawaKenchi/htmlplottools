@@ -46,11 +46,13 @@
 		<div>
 			<label for="plot-select">Choose a type:</label>
 			<select name="plotType" id="plotType">
+				<option value="bar">Bar</option>
+				<option value="horizontal_bar">Horizontal Bar</option>
+				<option value="box">Box</option>
+				<option value="violin">Violin</option>
 				<option value="scatter" selected>Scatter</option>
 				<option value="bubble">bubble</option>
 				<option value="heatmap">Heatmap</option>
-				<option value="box">Box</option>
-				<option value="violin">Violin</option>
 			</select>
 
 			<button type="button" id="DrawButton">Draw</button>
@@ -69,6 +71,73 @@
 					<label><input type="radio" id="SaveAsSVG" name="SaveAsOption" value="SVG" checked>SVG</label>
 				-->
 			</span>
+		</div>
+
+		<div id="xaxis_options" class="dialog-box">
+			<label class="box-title" for="xaxis_options_toggle">X-axis</label>
+			<input type="checkbox" class="dummy-toggler-checkbox" id="xaxis_options_toggle">
+			<div class="box-content">
+				type:
+				<label>Type:
+					<select id="xaxis-type">
+						<option value="-">-</option>
+						<option value="linear">linear</option>
+						<option value="log">log</option>
+						<option value="date">date</option>
+						<option value="category">category</option>
+						<option value="multicategory">multicategory</option>
+					</select>
+				</label>
+				<label>autorange: <input type="checkbox" id="xaxis-autorange" /></label>
+				<label>range min: <input type="text" id="xaxis-range-min" value="" size="6" /></label>
+				<label>range max: <input type="text" id="xaxis-range-max" value="" size="6" /></label>
+				<label><a href="https://plotly.com/javascript/tick-formatting/">tickmode:</a>
+					<select id="xaxis-tickmode">
+						<option value="linear">linear</option>
+						<option value="array">array</option>
+						<option value="tickvals">tickvals:[0,1,2]</option>
+						<option value="ticktext">ticktext:['Zero','One','Two']</option>
+					</select>
+				</label>
+				<label>ticks
+					<select id="xaxis-ticks">
+						<option value="outside">outside</option>
+						<option value="inside">inside</option>
+						<option value="">none</option>
+					</select>
+				</label>
+				<label>tick0: <input type="text" id="xaxis-tick0" value="0" size="6" /></label>
+				<label>dtick: <input type="text" id="xaxis-dtick" value="auto" size="6" /></label>
+				<label>ticklabelposition
+					<select id="xaxis-ticklabelposition">
+						<option value="outside">outside</option>
+						<option value="inside">inside</option>
+						<option value="outside top">outside top</option>
+						<option value="inside top">inside top</option>
+						<option value="outside left">outside top</option>
+						<option value="inside left">inside top</option>
+						<option value="outside right">outside right</option>
+						<option value="inside right">inside right</option>
+						<option value="outside bottom">outside bottom</option>
+						<option value="inside bottom">inside bottom</option>
+					</select>
+				</label>
+				<label>ticklabelstep: <input type="text" id="xaxis-ticklabelstep" value="1" size="6" /></label>
+				<label><a href="https://github.com/d3/d3-format/blob/master/README.md#locale_format">tickformat</a>: <input type="text" id="xaxis-tickformat" value="," size="6" /></label>
+				".1f"=>10.0, ".2s"=>10k, "%Y%m%d(%a)<br>%H:%M:%S"
+				<label>tickfont: <input type="text" id="xaxis-tickfont" value="" size="20" /></label>
+				<label>ticklen: <input type="text" id="xaxis-ticklen" value="5" size="6" /></label>
+				<label>tickwidth: <input type="text" id="xaxis-tickwidth" value="1" size="6" /></label>
+				<label>color: <input type="text" id="xaxis-color" value="black" size="6" /></label>
+				<label>linecolor: <input type="text" id="xaxis-linecolor" value="black" size="6" /></label>
+				<label>linewidth: <input type="text" id="xaxis-linewidth" value="1" size="6" /></label>
+				<label>showgrid: <input type="text" id="xaxis-showgrid" value="false" size="6" /></label>
+				// gridcolor: "#eee", gridwidth: 1, griddash: "solid"
+				<label>zeroline: <input type="text" id="xaxis-zeroline" value="false" size="6" /></label>
+				// zerolinecolor: "#444", zerolinewidth: 1
+				<label>title-text: <input type="text" id="xaxis-title-text" value="" size="20" /></label>
+				<label>title-font: <input type="text" id="xaxis-title-font" value="" size="20" /></label>
+			</div>
 		</div>
 
 		<div id="LayoutOptionTexts">
@@ -95,7 +164,13 @@
 	</section>
 
 
+<script src="./plottool.schema.editor.js"></script>
+<script>
+</script>
+
+
 <script type="module">
+	editor.generateEditDialogFromJSON();
 var OnCSVLoad = null;
 var fileText = "";
 var dataFrame = {};
@@ -128,18 +203,23 @@ fileInput.addEventListener('change', function(e){
 	} else {}
 }, false);
 function readCSV(f) {
-	if(!f.type.match('text.*') || !f.name.toLowerCase().match('.csv$')) {
-		alert(`use CSV : ${f.type} ${f.name.toLowerCase()}`); return;
+	try {
+		if(!f.type.match('text.*') || !f.name.toLowerCase().match('.csv$')) {
+			alert(`use CSV : ${f.type} ${f.name.toLowerCase()}`); return;
+		}
+		
+		var reader = new FileReader();
+		reader.onload = function() {
+			fileText = reader.result;
+			dataFrame = convertTxtToTable(fileText);
+			if(document.getElementById("TransposeLabel").checked) { dataFrame = transposeDataFrame(dataFrame); }
+			OnCSVLoad();
+		}
+		reader.readAsText(f);
+	} catch (error) {
+		console.error(error);
+		window.alert(error);
 	}
-	
-	var reader = new FileReader();
-	reader.onload = function() {
-		fileText = reader.result;
-		dataFrame = convertTxtToTable(fileText);
-		if(document.getElementById("TransposeLabel").checked) { dataFrame = transposeDataFrame(dataFrame); }
-		OnCSVLoad();
-	}
-	reader.readAsText(f);
 }
 function convertTxtToTable(txt) {
 	const firstRowToLabel = document.getElementById("FirstRowToLabel").checked;
@@ -148,7 +228,10 @@ function convertTxtToTable(txt) {
 	let rowname = [];
 	let result = [];
 	let rows = txt.split(/\r\n|\n/);
-	if(firstRowToLabel) { colname = rows.shift().split(/,|\t/); }
+	if(firstRowToLabel) {
+		colname = rows.shift().split(/,|\t/);
+		if(firstColumnToLabel) { colname.shift(); }
+	}
 	else { for(let i=0; i<rows[0].length; i++) { colname.push(i); } }
 	for (let i=0; i<rows.length; i++) {
 		let cols = rows[i].split(/,|\t/);
@@ -210,11 +293,17 @@ function drawPlot(df) {
 	}
 	const plottype = document.getElementById("plotType").value;
 	switch (plottype){
+		case "bar":
+			plotBar(df, opt, layout_customized, option_customized);
+			break;
+		case "horizontal_bar":
+			plotBarHorizontal(df, opt, layout_customized, option_customized);
+			break;
 		case "scatter":
-			scatterPlot(df, opt, layout_customized, option_customized);
+			plotScatter(df, opt, layout_customized, option_customized);
 			break;
 		case "bubble":
-			specialBubblePlot(df, opt, layout_customized, option_customized);
+			plotBubble(df, opt, layout_customized, option_customized);
 			break;
 		case "heatmap":
 			plotHeatmap(df, opt, layout_customized, option_customized);
@@ -293,6 +382,31 @@ common.color.scales.spectral_heatmap = [
 	['1.0', 'rgb(255,48,39)']
 ];
 
+common.layout_options = {
+	xaxis: {
+		type: ["-", "linear", "log", "date", "category", "multicategory"],
+		autorange: ["true", "false"],
+		range: null,        // [min, max]
+		tickmode: ['linear', "array"], // tickmode:'array', tickvals:[0,1,2], ticktext:['Zero','One','Two']
+		//https://plotly.com/javascript/tick-formatting/
+		ticks: ["outside", "inside", ""],
+		tick0: 0,           // beginning
+		dtick: "auto",      // interval (delta)
+		ticklabelposition: ["outside", "inside", "outside top", "inside top", "outside left", "inside left", "outside right", "inside right", "outside bottom", "inside bottom"],
+		ticklabelstep: 1,
+		//https://github.com/d3/d3-format/blob/master/README.md#locale_format
+		tickformat: ',',    // ".1f"=>10.0, ".2s"=>10k, "%Y%m%d(%a)<br>%H:%M:%S"
+		tickfont: {},
+		ticklen: 5,
+		tickwidth: 1,
+		color: 'black',
+		linecolor: 'black',
+		linewidth: 1,
+		showgrid: false,    // gridcolor: "#eee", gridwidth: 1, griddash: "solid"
+		zeroline: false,    // zerolinecolor: "#444", zerolinewidth: 1
+		title: { text: "", font: {} },
+	},
+}
 common.layout = {
 	// https://plotly.com/javascript/reference/layout/xaxis/
 	xaxis: {
@@ -356,7 +470,7 @@ common.layout = {
 
 function mergeLayoutOptions(dic1, dic2) {
 	if(dic2 instanceof Object) {
-		let dic_merged = _.merge(dic1, dic2);
+		let dic_merged = _.merge(structuredClone(dic1), structuredClone(dic2));
 		return dic_merged;
 	} else {
 		return dic1;
@@ -394,7 +508,85 @@ function plotToElement(data, layout, options) {
 	});
 }
 
-function scatterPlot(df, opt, layout_customized, option_customized) {
+
+
+function plotBar(df, opt, layout_customized, option_customized) {
+	// https://plotly.com/javascript/bar-charts/
+	let arr = df.table;
+	let colors = ['rgba(0, 0, 0, 1.0)'];
+	const series_default_options = {
+		type: "bar",
+		opacity: 1,
+	};
+	const layout_specific = {
+		font: { size: 24, color: 'black', family: 'Arial', },
+		width: 800,
+		height: 800,
+		title: '',
+	};
+	let layout = mergeLayoutOptions(common.layout, layout_specific);
+	writeToDefaultLayoutTextBox(layout);
+	writeToDefaultOptionTextBox(series_default_options);
+
+	let data = [];
+	for(let i=0; i<arr.length-1; i++) {
+		let seriese = {
+			x: arr[0],
+			y: arr[1+i],
+			name: df.rowname[1+i],
+		};
+		let series_options = mergeLayoutOptionsInArray(series_default_options, option_customized, i);
+		seriese = mergeLayoutOptionsInArray(seriese, series_options, i);
+		data.push(seriese);
+	};
+	document.querySelector("#layout_default").value = JSON.stringify(layout, null , "  ");
+	if(!(layout_customized===undefined)){ layout = mergeLayoutOptions(layout, layout_customized); }
+	plotToElement(data, layout, opt);
+}
+
+
+function plotBarHorizontal(df, opt, layout_customized, option_customized) {
+	// https://plotly.com/javascript/bar-charts/
+	let arr = df.table;
+	let colors = ['rgba(0, 0, 0, 1.0)'];
+	const series_default_options = {
+		type: "bar",
+  		orientation: "h",
+		opacity: 1,
+	};
+	const layout_specific = {
+		font: { size: 24, color: 'black', family: 'Arial', },
+		width: 800,
+		height: 800,
+		title: '',
+	};
+	let new_layout = structuredClone(common.layout);
+	let tmp = new_layout["xaxis"];
+	new_layout["xaxis"] = new_layout["yaxis"];
+	new_layout["yaxis"] = tmp;
+	let layout = mergeLayoutOptions(new_layout, layout_specific);
+	writeToDefaultLayoutTextBox(layout);
+	writeToDefaultOptionTextBox(series_default_options);
+
+	let data = [];
+	for(let i=0; i<arr.length-1; i++) {
+		let seriese = {
+			y: arr[0],
+			x: arr[1+i],
+			name: df.rowname[1+i],
+		};
+		let series_options = mergeLayoutOptionsInArray(series_default_options, option_customized, i);
+		seriese = mergeLayoutOptionsInArray(seriese, series_options, i);
+		data.push(seriese);
+	};
+	document.querySelector("#layout_default").value = JSON.stringify(layout, null , "  ");
+	if(!(layout_customized===undefined)){ layout = mergeLayoutOptions(layout, layout_customized); }
+	plotToElement(data, layout, opt);
+}
+
+
+
+function plotScatter(df, opt, layout_customized, option_customized) {
 	let arr = df.table;
 	let xData = df.rowname;
 
@@ -422,8 +614,8 @@ function scatterPlot(df, opt, layout_customized, option_customized) {
 	};
 	let layout = {
 		font: { size: 24, color: 'black', family: 'Arial', },
-		width: 800*2.9,
-		height: 800*1.0,
+		width: 800*1.5,
+		height: 800,
 		title: '',
 	};
 	document.querySelector("#layout_default").value = JSON.stringify(layout, null , "  ");
@@ -450,7 +642,7 @@ function plotBox(df, opt, layout_customized, option_customized) {
 		type: 'box',
 		width: 0.5,
 		pointpos: 0,
-		boxpoints: 'all', // "all" | "outliers" | "suspectedoutliers" | false
+		boxpoints: 'outliers', // "all" | "outliers" | "suspectedoutliers" | false
 		opacity: 1,
 	};
 	const layout_specific = {
@@ -556,7 +748,7 @@ function plotHeatmap(df, opt, layout_customized, option_customized) {
 }
 
 
-function specialBubblePlot(df, opt, layout_customized) {
+function plotBubble(df, opt, layout_customized) {
 	const layout_specific = {
 		font: { size: 24, color: 'black', family: 'Arial', },
 		width: 800*2.9,
@@ -714,6 +906,39 @@ h2 > span {
 	margin: auto 3rem;
 	padding: 0.5rem;
 	background-color: #FFF8;
+}
+
+
+.dialog-box {
+    position: relative;
+    margin: 2em 0;
+    padding: 0.5em 1em;
+    border: solid 3px #62c1ce;
+}
+.dialog-box .box-title {
+    position: absolute;
+    display: inline-block;
+    top: -27px;
+    left: -3px;
+    padding: 0 9px;
+    height: 25px;
+    line-height: 25px;
+    font-size: 17px;
+    background: #62c1ce;
+    color: #ffffff;
+    font-weight: bold;
+    border-radius: 5px 5px 0 0;
+}
+.dialog-box .box-content {
+	display: none;
+    margin: 0; 
+    padding: 0;
+}
+.dummy-toggler-checkbox {
+	display: none;
+}
+.dummy-toggler-checkbox:checked ~ .box-content{
+	display: block;
 }
 
 </style>
